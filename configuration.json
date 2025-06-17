@@ -1,0 +1,42 @@
+{
+  "hamaServers": {
+    "youtube-transcript": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@kimtaeyoon83/mcp-server-youtube-transcript"
+      ]
+    },
+    "firecrawl": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "firecrawl-mcp"
+      ],
+      "env": {
+        "FIRECRAWL_API_KEY": "fc-8d832cce8cd2433183298e9c503c9e55",
+        "FIRECRAWL_RETRY_MAX_ATTEMPTS": "5",
+        "FIRECRAWL_RETRY_INITIAL_DELAY": "2000",
+        "FIRECRAWL_RETRY_MAX_DELAY": "30000",
+        "FIRECRAWL_RETRY_BACKOFF_FACTOR": "3",
+        "FIRECRAWL_CREDIT_WARNING_THRESHOLD": "2000",
+        "FIRECRAWL_CREDIT_CRITICAL_THRESHOLD": "500"
+      }
+    },
+    "todoist": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@abhiz123/todoist-mcp-server",
+        "--key",
+        "54144081-4b92-4909-8f0c-e6f3075d87ef",
+        "--config",
+        "{\"todoistApiToken\":\"dbcd0e32d548b1222f8f44a1947852110380f432\"}"
+      ]
+    }
+  }
+}
