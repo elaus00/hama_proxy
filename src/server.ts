@@ -16,7 +16,16 @@ import {
     ResourceListChangedNotificationSchema,
     isInitializeRequest,
     JSONRPCMessage,
-    ServerCapabilities
+    ServerCapabilities,
+    CallToolRequestSchema,
+    ListToolsRequestSchema,
+    GetPromptRequestSchema,
+    ListPromptsRequestSchema,
+    ReadResourceRequestSchema,
+    ListResourcesRequestSchema,
+    SubscribeRequestSchema,
+    UnsubscribeRequestSchema,
+    CompleteRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 
 /**
@@ -121,49 +130,49 @@ const setupProxyServer = async (
 
     // Tools 지원
     if (serverCapabilities?.tools) {
-        server.setRequestHandler({ method: "tools/call" }, async (args) => {
-            return client.callTool(args.params);
+        server.setRequestHandler(CallToolRequestSchema, async (request) => {
+            return client.callTool(request.params);
         });
-        server.setRequestHandler({ method: "tools/list" }, async (args) => {
-            return client.listTools(args.params);
+        server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+            return client.listTools(request.params);
         });
     }
 
     // Prompts 지원
     if (serverCapabilities?.prompts) {
-        server.setRequestHandler({ method: "prompts/get" }, async (args) => {
-            return client.getPrompt(args.params);
+        server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+            return client.getPrompt(request.params);
         });
-        server.setRequestHandler({ method: "prompts/list" }, async (args) => {
-            return client.listPrompts(args.params);
+        server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
+            return client.listPrompts(request.params);
         });
     }
 
     // Resources 지원
     if (serverCapabilities?.resources) {
-        server.setRequestHandler({ method: "resources/list" }, async (args) => {
-            return client.listResources(args.params);
+        server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
+            return client.listResources(request.params);
         });
-        server.setRequestHandler({ method: "resources/read" }, async (args) => {
-            return client.readResource(args.params);
+        server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+            return client.readResource(request.params);
         });
 
         if (serverCapabilities?.resources.subscribe) {
             server.setNotificationHandler(ResourceListChangedNotificationSchema, async (args) => {
                 return client.notification(args);
             });
-            server.setRequestHandler({ method: "resources/subscribe" }, async (args) => {
-                return client.subscribeResource(args.params);
+            server.setRequestHandler(SubscribeRequestSchema, async (request) => {
+                return client.subscribeResource(request.params);
             });
-            server.setRequestHandler({ method: "resources/unsubscribe" }, async (args) => {
-                return client.unsubscribeResource(args.params);
+            server.setRequestHandler(UnsubscribeRequestSchema, async (request) => {
+                return client.unsubscribeResource(request.params);
             });
         }
     }
 
     // Completion 지원
-    server.setRequestHandler({ method: "completion/complete" }, async (args) => {
-        return client.complete(args.params);
+    server.setRequestHandler(CompleteRequestSchema, async (request) => {
+        return client.complete(request.params);
     });
 };
 
@@ -374,11 +383,11 @@ class EnhancedHamaManager {
 
         // 프록시 설정
         await setupProxyServer(connection.client, server, {
-            tools: true,
+            tools: {},
             resources: { subscribe: true },
-            prompts: true,
-            completion: true,
-            logging: true
+            prompts: {},
+            completion: {},
+            logging: {}
         });
 
         return server;
@@ -401,33 +410,33 @@ class EnhancedHamaManager {
         });
 
         // 통합된 요청 처리
-        server.setRequestHandler({ method: "tools/list" }, async () => {
+        server.setRequestHandler(ListToolsRequestSchema, async () => {
             return { tools: this.getUnifiedTools() };
         });
 
-        server.setRequestHandler({ method: "tools/call" }, async (args) => {
+        server.setRequestHandler(CallToolRequestSchema, async (request) => {
             try {
-                return await this.callTool(args.params.name, args.params.arguments || {});
+                return await this.callTool(request.params.name, request.params.arguments || {});
             } catch (error) {
                 console.error(`프록시 서버 도구 호출 실패:`, error);
                 throw error;
             }
         });
 
-        server.setRequestHandler({ method: "prompts/list" }, async () => {
+        server.setRequestHandler(ListPromptsRequestSchema, async () => {
             return { prompts: this.getUnifiedPrompts() };
         });
 
-        server.setRequestHandler({ method: "prompts/get" }, async (args) => {
-            return this.getPrompt(args.params.name, args.params.arguments || {});
+        server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+            return this.getPrompt(request.params.name, request.params.arguments || {});
         });
 
-        server.setRequestHandler({ method: "resources/list" }, async () => {
+        server.setRequestHandler(ListResourcesRequestSchema, async () => {
             return { resources: this.getUnifiedResources() };
         });
 
-        server.setRequestHandler({ method: "resources/read" }, async (args) => {
-            return this.readResource(args.params.uri);
+        server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+            return this.readResource(request.params.uri);
         });
 
         return server;
@@ -529,7 +538,7 @@ class EnhancedHamaManager {
             console.error(`❌ MCP 클라이언트 호출 실패:`, error);
             
             // Zod 스키마 검증 오류인 경우 원본 응답 데이터 추출 시도
-            if (error.name === 'ZodError' && error.issues) {
+            if ((error as any).name === 'ZodError' && (error as any).issues) {
                 console.log(`Zod 검증 오류 - 직접 호출 시도`);
                 
                 try {
@@ -542,7 +551,7 @@ class EnhancedHamaManager {
                     return {
                         content: [{
                             type: "text",
-                            text: `도구 실행 오류: MCP 응답 형식 문제 (${actualToolName})\n오류 세부사항: ${error.message}`
+                            text: `도구 실행 오류: MCP 응답 형식 문제 (${actualToolName})\n오류 세부사항: ${(error as Error).message}`
                         }]
                     };
                 }
@@ -582,18 +591,15 @@ class EnhancedHamaManager {
                 ];
                 
                 let textContent = '';
-                let usedField = '';
                 
                 // 우선순위대로 필드 확인
                 for (const field of textFields) {
                     if (result[field] !== undefined && result[field] !== null) {
                         if (typeof result[field] === 'string') {
                             textContent = result[field];
-                            usedField = field;
                             break;
                         } else if (typeof result[field] === 'object') {
                             textContent = JSON.stringify(result[field], null, 2);
-                            usedField = field;
                             break;
                         }
                     }
@@ -602,7 +608,6 @@ class EnhancedHamaManager {
                 // 적절한 필드를 찾지 못한 경우 전체 객체를 JSON으로 변환
                 if (!textContent) {
                     textContent = JSON.stringify(result, null, 2);
-                    usedField = 'full_object';
                 }
                 
                 return {
@@ -866,13 +871,10 @@ class EnhancedHamaManager {
                         transport = activeTransport.transport;
                         server = activeTransport.server;
                     } else if (!sessionId && isInitializeRequest(body)) {
-                        const serverName = body.params?.serverName || "unified";
+                        const serverName = (body.params && typeof body.params === 'object' && 'serverName' in body.params && typeof body.params.serverName === 'string') ? body.params.serverName : "unified";
                         
                         transport = new StreamableHTTPServerTransport({
                             eventStore: this.eventStore,
-                            onsessioninitialized: (_sessionId) => {
-                                this.activeStreamTransports.set(_sessionId, { server, transport });
-                            },
                             sessionIdGenerator: randomUUID,
                         });
 
@@ -899,7 +901,12 @@ class EnhancedHamaManager {
                             return;
                         }
 
-                        server.connect(transport);
+                        await server.connect(transport);
+                        
+                        // 세션 등록
+                        if (transport.sessionId) {
+                            this.activeStreamTransports.set(transport.sessionId, { server, transport });
+                        }
                     } else {
                         res.setHeader("Content-Type", "application/json");
                         res.status(400).json({
